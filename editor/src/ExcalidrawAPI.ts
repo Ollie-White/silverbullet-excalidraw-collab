@@ -112,7 +112,17 @@ export class ExcalidrawApiBridge {
     }
 
 
-    public async load(message: { blob: Blob, viewMode: boolean, theme: string }): Promise<void> {
+    public async load(message: { 
+        blob: Blob, 
+        viewMode: boolean, 
+        theme: string,
+        roomId?: string,
+        roomKey?: string,
+        collaborationServer?: string 
+    }): Promise<void> {
+        // If we have collaboration info, we might want to handle it differently
+        // For now, we'll still load from the blob but the collaboration will be handled
+        // by the Excalidraw component itself once we implement WebSocket integration
         loadFromBlob(message.blob, null, null)
             .then((restoredState: RestoredDataState | undefined) => {
                 if (!restoredState) return;

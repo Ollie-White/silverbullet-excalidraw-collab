@@ -28,13 +28,18 @@ interface AppProps {
     theme: string;
     viewMode: boolean;
     fileName: string;
+    roomId?: string;
+    roomKey?: string;
+    collaborationServer?: string;
 }
 
-function App({ doc, theme, viewMode, fileName }: AppProps) {
+function App({ doc, theme, viewMode, fileName, roomId, roomKey, collaborationServer }: AppProps) {
     const excalidrawApiRef = useRef<ExcalidrawImperativeAPI | null>(null);
     const apiBridgeRef = useRef(
         new ExcalidrawApiBridge(excalidrawApiRef, fileName, "editor")
     );
+    
+    const isCollaborating = !!(roomId && roomKey && collaborationServer);
 
     const onChange = useCallback(() => {
         silverbullet.sendMessage("file-changed", {});
@@ -52,18 +57,25 @@ function App({ doc, theme, viewMode, fileName }: AppProps) {
 
             const data = await syscaller("space.readFile", fileName);
             const blob = getBlob(data, getExtension(fileName));
-            apiBridgeRef.current.load({ blob: blob, viewMode: viewMode, theme: theme });
+            apiBridgeRef.current.load({ 
+                blob: blob, 
+                viewMode: viewMode, 
+                theme: theme,
+                roomId: roomId,
+                roomKey: roomKey,
+                collaborationServer: collaborationServer
+            });
 
             silverbullet.addEventListener("request-save", () => save());
         },
-        [fileName, save]
+        [fileName, save, roomId, roomKey, collaborationServer]
     );
 
     return (
         <div className={viewMode ? "excalidraw-viewer" : "excalidraw-editor"}>
             <Excalidraw
                 excalidrawAPI={excalidrawRef}
-                isCollaborating={false}
+                isCollaborating={isCollaborating}
                 initialData={doc}
                 key={fileName}
                 onChange={onChange}
@@ -96,7 +108,21 @@ async function open(root: ReactDOM.Root, data: any) {
     }
     const doc: ExcalidrawInitialDataState = JSON.parse(json);
     const isRoMode = (await syscaller("system.getMode")) === "ro";
-    root.render(<App doc={doc} theme={theme} viewMode={isRoMode} fileName={fileName} />);
+    
+    // Extract collaboration info from the document
+    const roomId = (doc as any).roomId;
+    const roomKey = (doc as any).roomKey;
+    const collaborationServer = (doc as any).collaborationServer;
+    
+    root.render(<App 
+        doc={doc} 
+        theme={theme} 
+        viewMode={isRoMode} 
+        fileName={fileName}
+        roomId={roomId}
+        roomKey={roomKey}
+        collaborationServer={collaborationServer}
+    />);
 }
 
 export function renderEditor(rootElement: HTMLElement) {

@@ -24,15 +24,20 @@ interface AppProps {
     doc: ExcalidrawInitialDataState;
     fileName: string;
     theme: string;
+    roomId?: string;
+    roomKey?: string;
+    collaborationServer?: string;
 }
 
 
-function App({ doc, fileName, theme }: AppProps) {
+function App({ doc, fileName, theme, roomId, roomKey, collaborationServer }: AppProps) {
 
     const excalidrawApiRef = useRef<ExcalidrawImperativeAPI | null>(null);
     const apiBridge = useRef(
         new ExcalidrawApiBridge(excalidrawApiRef, fileName, "widget")
     ).current;
+    
+    const isCollaborating = !!(roomId && roomKey && collaborationServer);
 
     const onChange = useCallback(() => {
         apiBridge.debouncedSave();
@@ -53,9 +58,16 @@ function App({ doc, fileName, theme }: AppProps) {
             excalidrawApiRef.current = excalidrawApi;
             const data = await syscaller("space.readFile", fileName);
             const blob = getBlob(data, getExtension(fileName));
-            apiBridge.load({ blob: blob, viewMode: false, theme: theme });
+            apiBridge.load({ 
+                blob: blob, 
+                viewMode: false, 
+                theme: theme,
+                roomId: roomId,
+                roomKey: roomKey,
+                collaborationServer: collaborationServer
+            });
         },
-        [fileName, apiBridge]
+        [fileName, apiBridge, roomId, roomKey, collaborationServer]
     );
 
     const UiControls = () => (
@@ -76,7 +88,7 @@ function App({ doc, fileName, theme }: AppProps) {
         <div className={"excalidraw-editor"}>
             <Excalidraw
                 excalidrawAPI={excalidrawRef}
-                isCollaborating={false}
+                isCollaborating={isCollaborating}
                 // initialData={doc}
                 onChange={onChange}
                 viewModeEnabled={false}
@@ -99,6 +111,9 @@ function App({ doc, fileName, theme }: AppProps) {
 export async function renderSvgEditorElement(rootElement: HTMLElement) {
     const fileName = rootElement.dataset.filename!;
     const theme = rootElement.dataset.theme || "light";
+    const roomId = rootElement.dataset.roomId;
+    const roomKey = rootElement.dataset.roomKey;
+    const collaborationServer = rootElement.dataset.collaborationServer;
 
     let data = await syscaller("space.readFile", fileName);
     let svg: string;
@@ -109,6 +124,13 @@ export async function renderSvgEditorElement(rootElement: HTMLElement) {
     }
     const doc: ExcalidrawInitialDataState = svg;
     const root = ReactDOM.createRoot(rootElement);
-    root.render(<App doc={doc} theme={theme} fileName={fileName} />);
+    root.render(<App 
+        doc={doc} 
+        theme={theme} 
+        fileName={fileName}
+        roomId={roomId}
+        roomKey={roomKey}
+        collaborationServer={collaborationServer}
+    />);
 }
 

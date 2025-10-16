@@ -29,15 +29,20 @@ interface AppProps {
     fileName: string;
     theme: string;
     viewMode: boolean;
+    roomId?: string;
+    roomKey?: string;
+    collaborationServer?: string;
 }
 
 
-function App({ doc, fileName, theme, viewMode }: AppProps) {
+function App({ doc, fileName, theme, viewMode, roomId, roomKey, collaborationServer }: AppProps) {
 
     const excalidrawApiRef = useRef<ExcalidrawImperativeAPI | null>(null);
     const apiBridge = useRef(
         new ExcalidrawApiBridge(excalidrawApiRef, fileName, "widget")
     ).current;
+    
+    const isCollaborating = !!(roomId && roomKey && collaborationServer);
 
     const onChange = useCallback(() => {
         apiBridge.debouncedSave();
@@ -56,9 +61,16 @@ function App({ doc, fileName, theme, viewMode }: AppProps) {
 
             const data = await syscaller("space.readFile", fileName);
             const blob = getBlob(data, getExtension(fileName));
-            apiBridge.load({ blob: blob, viewMode: true, theme: theme });
+            apiBridge.load({ 
+                blob: blob, 
+                viewMode: true, 
+                theme: theme,
+                roomId: roomId,
+                roomKey: roomKey,
+                collaborationServer: collaborationServer
+            });
         },
-        [fileName, apiBridge]
+        [fileName, apiBridge, roomId, roomKey, collaborationServer]
     );
 
 
@@ -77,7 +89,7 @@ function App({ doc, fileName, theme, viewMode }: AppProps) {
         <div className={"excalidraw-viewer"}>
             <Excalidraw
                 excalidrawAPI={excalidrawRef}
-                isCollaborating={false}
+                isCollaborating={isCollaborating}
                 initialData={doc}
                 onChange={onChange}
                 viewModeEnabled={true}
@@ -102,6 +114,9 @@ function App({ doc, fileName, theme, viewMode }: AppProps) {
 export async function renderWidget(rootElement: HTMLElement) {
     const fileName = rootElement.dataset.filename!;
     const theme = rootElement.dataset.theme || "light";
+    const roomId = rootElement.dataset.roomId;
+    const roomKey = rootElement.dataset.roomKey;
+    const collaborationServer = rootElement.dataset.collaborationServer;
 
     let data = await syscaller("space.readFile", fileName);
     let json: string;
@@ -113,6 +128,14 @@ export async function renderWidget(rootElement: HTMLElement) {
     const doc: ExcalidrawInitialDataState = JSON.parse(json);
     const isRoMode = (await syscaller("system.getMode")) === "ro";
     const root = ReactDOM.createRoot(rootElement);
-    root.render(<App doc={doc} theme={theme} viewMode={isRoMode} fileName={fileName} />);
+    root.render(<App 
+        doc={doc} 
+        theme={theme} 
+        viewMode={isRoMode} 
+        fileName={fileName}
+        roomId={roomId}
+        roomKey={roomKey}
+        collaborationServer={collaborationServer}
+    />);
 }
 
