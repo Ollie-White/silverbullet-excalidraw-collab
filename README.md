@@ -1,6 +1,6 @@
 # SilverBullet plug for Excalidraw diagrams
 
-This plug adds [Excalidraw](https://excalidraw.com/) support to Silverbullet.
+This plug adds [Excalidraw](https://excalidraw.com/) support to Silverbullet with optional collaboration server integration.
 
 ## Installation
 
@@ -15,6 +15,26 @@ config.set {
 ```
 
 Run `Plugs: Update` command and off you go!
+
+## Collaboration Server
+
+This plugin now supports integration with excalidraw-room collaboration servers. When enabled, diagrams are stored on a collaboration server instead of locally, enabling real-time collaborative editing.
+
+### Configuration
+
+To use collaboration features, configure the following settings in your SilverBullet space:
+
+1. Open the command palette and run `Client: Set Value`
+2. Set `excalidraw.collaborationServerUrl` to your excalidraw-room server URL (e.g., `https://your-excalidraw-room-server.com`)
+3. Optionally, set `excalidraw.collaborationEnabled` to `true` or `false` to enable/disable collaboration
+
+When collaboration is enabled:
+- New diagrams create a room on the collaboration server
+- The local file stores only the room ID and credentials (not the drawing data)
+- Multiple users can edit the same diagram simultaneously
+- Changes sync in real-time through the collaboration server
+
+If the collaboration server is unavailable, the plugin will fall back to creating a local file.
 
 ## Usage
 
