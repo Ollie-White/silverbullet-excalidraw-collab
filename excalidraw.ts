@@ -9,7 +9,59 @@ import { SlashCompletions } from "@silverbulletmd/silverbullet/types";
 
 type DiagramType = "Widget" | "Attachment";
 
-type props = { height?: string, theme?: string }
+type CollaborationConfig = {
+  serverUrl: string;
+  enabled: boolean;
+};
+
+type ExcalidrawFileData = {
+  type: "excalidraw";
+  version: number;
+  roomId?: string;
+  roomKey?: string;
+  collaborationServer?: string;
+  elements?: any[];
+  appState?: any;
+  files?: any;
+};
+
+type props = { height?: string, theme?: string, roomId?: string, roomKey?: string, collaborationServer?: string }
+
+// Get collaboration configuration from client store
+async function getCollaborationConfig(): Promise<CollaborationConfig> {
+  const serverUrl = await clientStore.get("excalidraw.collaborationServerUrl");
+  const enabled = await clientStore.get("excalidraw.collaborationEnabled");
+  return {
+    serverUrl: serverUrl || "https://excalidraw-room.example.com",
+    enabled: enabled !== false, // enabled by default
+  };
+}
+
+// Create a new collaboration room
+async function createCollaborationRoom(serverUrl: string): Promise<{ roomId: string; roomKey: string } | null> {
+  try {
+    const response = await fetch(`${serverUrl}/api/v2/rooms`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+    
+    if (!response.ok) {
+      console.error("Failed to create collaboration room:", response.statusText);
+      return null;
+    }
+    
+    const data = await response.json();
+    return {
+      roomId: data.roomId,
+      roomKey: data.roomKey,
+    };
+  } catch (error) {
+    console.error("Error creating collaboration room:", error);
+    return null;
+  }
+}
 
 async function getHtmlJs(
   path: string,
@@ -20,20 +72,31 @@ async function getHtmlJs(
   const theme = props.theme || spaceTheme;
   const js = await asset.readAsset("excalidraw", "assets/editor.js");
   const css = await asset.readAsset("excalidraw", "assets/editor.css");
-  const data = `data-filename="${path}" data-theme="${theme}" data-type="${type}"`;
+  
+  // Build data attributes
+  let dataAttrs = `data-filename="${path}" data-theme="${theme}" data-type="${type}"`;
+  if (props.roomId) {
+    dataAttrs += ` data-room-id="${props.roomId}"`;
+  }
+  if (props.roomKey) {
+    dataAttrs += ` data-room-key="${props.roomKey}"`;
+  }
+  if (props.collaborationServer) {
+    dataAttrs += ` data-collaboration-server="${props.collaborationServer}"`;
+  }
 
   let html = "";
   switch (type) {
     case "editor": {
-      html = `<style>${css}</style><div id="editor" ${data}></div>`;
+      html = `<style>${css}</style><div id="editor" ${dataAttrs}></div>`;
       break;
     }
     case "widget": {
-      html = `<style>${css}</style><div id="widget" class="excalidraw-widget" style="height: ${props.height}" ${data}></div>`;
+      html = `<style>${css}</style><div id="widget" class="excalidraw-widget" style="height: ${props.height}" ${dataAttrs}></div>`;
       break;
     }
     case "fullscreen": {
-      html = `<style>${css}</style><div id="svgeditor" class="excalidraw-fullscreen" ${data}></div>`;
+      html = `<style>${css}</style><div id="svgeditor" class="excalidraw-fullscreen" ${dataAttrs}></div>`;
       break;
     }
   }
@@ -203,9 +266,36 @@ async function fileAlreadyExists(filePath: string): Promise<boolean> {
 }
 
 async function writeEmptyExcalidrawFile(filePath: string): Promise<void> {
-  const content = new TextEncoder().encode(
-    `{"type":"excalidraw","version":2,"elements":[],"appState":{},"files":{}}`
-  );
+  const config = await getCollaborationConfig();
+  
+  let fileData: ExcalidrawFileData = {
+    type: "excalidraw",
+    version: 2,
+    elements: [],
+    appState: {},
+    files: {}
+  };
+  
+  // If collaboration is enabled, create a room
+  if (config.enabled && config.serverUrl) {
+    const roomInfo = await createCollaborationRoom(config.serverUrl);
+    if (roomInfo) {
+      fileData.roomId = roomInfo.roomId;
+      fileData.roomKey = roomInfo.roomKey;
+      fileData.collaborationServer = config.serverUrl;
+      // Don't include elements/appState/files for collaborative files
+      delete fileData.elements;
+      delete fileData.appState;
+      delete fileData.files;
+    } else {
+      await editor.flashNotification(
+        "Could not create collaboration room, creating local file instead",
+        "info"
+      );
+    }
+  }
+  
+  const content = new TextEncoder().encode(JSON.stringify(fileData));
   await space.writeFile(filePath, content);
 }
 
@@ -260,7 +350,24 @@ export async function showWidget(
     return { html: `<pre>File does not exist</pre>`, script: "" };
   }
 
-  return getHtmlJs(path, 'widget', { height: height || "600px", theme: theme || undefined });
+  // Read the file to check if it contains collaboration info
+  const fileContent = await space.readFile(path);
+  const decoder = new TextDecoder("utf-8");
+  const jsonStr = decoder.decode(fileContent);
+  
+  try {
+    const fileData: ExcalidrawFileData = JSON.parse(jsonStr);
+    return getHtmlJs(path, 'widget', { 
+      height: height || "600px", 
+      theme: theme || undefined,
+      roomId: fileData.roomId,
+      roomKey: fileData.roomKey,
+      collaborationServer: fileData.collaborationServer
+    });
+  } catch (e) {
+    // If parsing fails, fall back to regular behavior
+    return getHtmlJs(path, 'widget', { height: height || "600px", theme: theme || undefined });
+  }
 }
 
 export function snippetSlashComplete(): SlashCompletions {
